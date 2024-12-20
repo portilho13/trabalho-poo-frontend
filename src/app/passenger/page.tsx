@@ -15,6 +15,7 @@ interface Flight {
 
 interface Booking {
   id: number,
+  reservationCode: string,
   flightNumber: string,
   origin: string,
   destination: string
@@ -26,44 +27,58 @@ export default function Dashboard() {
   const [flights, setFlights] = useState<Flight[]>([])
   const [bookings, setBookings] = useState<Booking[]>([])
 
-  const availableFlights = [
-    {
-      id: '1',
-      flightNumber: 'RYR321',
-      origin: 'London',
-      destination: 'Paris',
-      departureTime: '2024-01-15 10:30',
-    },
-    {
-      id: '2',
-      flightNumber: 'RYR456',
-      origin: 'Paris',
-      destination: 'Rome',
-      departureTime: '2024-01-16 14:45',
-    },
-    {
-      id: '3',
-      flightNumber: 'RYR789',
-      origin: 'Rome',
-      destination: 'Berlin',
-      departureTime: '2024-01-17 08:15',
-    }
-  ]
+  useEffect(() => {
+    fetchBookings()
+    console.log(bookings)
+  }, [])
+  
+  const fetchBookings = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/SessionManager/GetPassengerReservations');
+      const data = await response.json();
 
-  const myBookings = [
-    {
-      flightNumber: 'RYR321',
-      route: 'London → Paris',
-      departureTime: '2024-01-15 10:30',
-      status: 'Upcoming'
-    },
-    {
-      flightNumber: 'RYR456',
-      route: 'Paris → Rome',
-      departureTime: '2024-02-01 14:45',
-      status: 'Completed'
+      
+      const bookingsArray = Array.isArray(data) ? data : data.bookings || [];
+      
+      const formattedBookings: Booking[] = await Promise.all(
+        bookingsArray.map(async (booking: any, index: number) => {
+          try {
+            const resp = await fetch(`http://localhost:5000/api/flight/${booking.flightNumber}`);
+            if (!resp.ok) {
+              throw new Error(`Failed to fetch flight data for ${booking.flightNumber}`);
+            }
+            const flightData = await resp.json();
+            
+            return {
+              id: index + 1,
+              flightNumber: flightData.number || 'Unknown',
+              origin: flightData.origin?.airportName || 'Unknown',
+              destination: flightData.destination?.airportName || 'Unknown',
+              departureTime: flightData.scheduledDateTime !== '0001-01-01T00:00:00'
+                ? flightData.scheduledDateTime
+                : null,
+            };
+          } catch (error) {
+            console.error(`Error fetching flight ${booking.flightNumber}:`, error);
+            return {
+              id: index + 1,
+              reservationCode: booking.reservationCode,
+              flightNumber: booking.flightNumber || 'Unknown',
+              origin: 'Unknown',
+              destination: 'Unknown',
+              departureTime: null,
+            };
+          }
+        })
+      );
+      
+      setBookings(formattedBookings);
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+      setBookings([]);
     }
-  ]
+  };
+  
 
   const fetchFlights = async () => {
     const response = await fetch("http://localhost:5000/api/flight")
@@ -179,29 +194,25 @@ export default function Dashboard() {
               <h2 className="text-xl font-semibold">My Bookings</h2>
             </div>
             <div className="divide-y">
-              {myBookings.map((flight) => (
+              {bookings.map((booking) => (
                 <div
-                  key={flight.flightNumber}
+                  key={booking.flightNumber}
                   className="p-6 flex flex-col md:flex-row md:items-center md:justify-between hover:bg-gray-50"
                 >
                   <div className="flex flex-col gap-1">
                     <div className="text-sm text-gray-500">
-                      Flight {flight.flightNumber}
+                      Flight {booking.flightNumber}
                     </div>
-                    <div className="font-medium">{flight.route}</div>
+                    <div className="font-medium">{booking.origin} → {booking.destination}</div>
                     <div className="text-sm text-gray-500">
-                        {format(parseISO(flight.departureTime), 'yyyy-MM-dd HH:mm')}
+                        {format(parseISO(booking.departureTime), 'yyyy-MM-dd HH:mm')}
                     </div>
                   </div>
                   <div className="mt-4 md:mt-0 flex items-center gap-4">
                     <span
-                      className={`px-3 py-1 rounded-full text-sm ${
-                        flight.status === 'Upcoming'
-                          ? 'bg-gray-100 text-gray-800'
-                          : 'bg-gray-200 text-gray-800'
-                      }`}
+                      className={`px-3 py-1 rounded-full text-sm`}
                     >
-                      {flight.status}
+                      {booking.reservationCode}
                     </span>
                   </div>
                 </div>
