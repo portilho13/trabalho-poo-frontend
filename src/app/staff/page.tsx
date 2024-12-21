@@ -1,12 +1,25 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import AirportManagement from '../components/AirportManagement'
 import AirplaneManagement from '../components/AirplaneManagement'
 import FlightManagement from '../components/FlightManagement'
+import { useRouter } from 'next/navigation'
 
 export default function StaffDashboard() {
   const [activeTab, setActiveTab] = useState('airports')
+  const router = useRouter()
+
+  useEffect(() => {
+    fetchUserData()
+  }, [])
+
+  const fetchUserData = async () => {
+    const response = await fetch('http://localhost:5000/api/SessionManager/GetLoggedInUser');
+
+    const data = await response.json();
+    if (data.message === 'No user is currently logged in') router.push('/');
+  };
 
   return (
     <div className="bg-white shadow text-black overflow-hidden sm:rounded-lg">

@@ -1,90 +1,157 @@
-"use client"
+'use client'
 
-import { useEffect, useState } from 'react'
-import { Search, Calendar } from 'lucide-react'
-import PassengerDashboardLayout from './passanger-dashboard-layout'
+import { useEffect, useState } from 'react';
+import { Search, Calendar } from 'lucide-react';
+import PassengerDashboardLayout from './passanger-dashboard-layout';
 import { format, parseISO } from 'date-fns';
+import { useRouter } from 'next/navigation';
 
 interface Flight {
-    id: number,
-    flightNumber: string,
-    origin: string,
-    destination: string
-    departureTime: string
+  id: number;
+  flightNumber: string;
+  origin: string;
+  destination: string;
+  departureTime: string;
 }
 
 interface Booking {
-  id: number,
-  reservationCode: string,
-  flightNumber: string,
-  origin: string,
-  destination: string
-  departureTime: string
+  id: number;
+  reservationCode: string;
+  flightNumber: string;
+  origin: string;
+  destination: string;
+  departureTime: string;
+}
+
+interface UserData {
+  name: string;
 }
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState('search')
-  const [flights, setFlights] = useState<Flight[]>([])
-  const [bookings, setBookings] = useState<Booking[]>([])
+  const [activeTab, setActiveTab] = useState('search');
+  const [flights, setFlights] = useState<Flight[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [userData, setUserData] = useState<UserData | undefined>(undefined);
+
+  const router = useRouter();
 
   useEffect(() => {
-    fetchBookings()
-  }, [])
+    fetchUserData();
+    fetchFlights();
+    if (flights.length > 0)
+      fetchBookings();
+  }, []);
 
-  const fetchFlight = async(flightNumber: string) => {
+  const fetchFlight: any = async (flightNumber: string) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/flight/${flightNumber}`)
-      const data = await response.json()
-      console.log(data)
-    } catch(error) {
-
+      const response = await fetch(`http://localhost:5000/api/flight/${flightNumber}`);
+      const data = await response.json();
+      return {
+        origin: data.origin,
+        destination: data.destination,
+        departureTime: data.scheduledDateTime,
+      }; // Return flight details
+    } catch (error) {
+      console.error('Error fetching flight:', error);
+      return null; // Return a default value if the fetch fails
     }
-  }
-  
+  };
+
   const fetchBookings = async () => {
     try {
       const response = await fetch('http://localhost:5000/api/SessionManager/GetPassengerReservations');
       const data = await response.json();
 
-          
-      const formattedBookings: Booking[] = data.map((booking: any, index: number) => {
-        fetchFlight(booking.flightNumber)
-      })
+      if (data.message === 'No reservations found for the logged-in passenger') {
+        setBookings([]);
+        return;
+      }
 
+      // Use Promise.all to handle multiple asynchronous fetch calls
+      const formattedBookings: Booking[] = await Promise.all(
+        data.map(async (booking: any, index: number) => {
+          const flightData = await fetchFlight(booking.flightNumber); // Wait for flight details
+          return {
+            id: index + 1,
+            flightNumber: booking.flightNumber,
+            reservationCode: booking.reservationCode,
+            origin: flightData.origin.airportName,
+            destination: flightData.destination.airportName,
+            departureTime: flightData.departureTime,
+          };
+        })
+      );
       setBookings(formattedBookings);
     } catch (error) {
       console.error('Error fetching bookings:', error);
       setBookings([]);
     }
   };
-  
+
+  const fetchUserData = async () => {
+    const response = await fetch('http://localhost:5000/api/SessionManager/GetLoggedInUser');
+
+    const data = await response.json();
+    if (data.message === 'No user is currently logged in') router.push('/');
+    setUserData({ name: data.name });
+  };
+
+  const buyTicket = async (flightNumber: string) => {
+    const response = await fetch(`http://localhost:5000/api/flight/${flightNumber}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        FlightNumber: flightNumber,
+        Name: userData?.name,
+      }),
+    });
+
+    const data = await response.json();
+    const req = await fetch('http://localhost:5000/api/SessionManager/AddPassengerReservation', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        FlightNumber: flightNumber,
+        ReservationCode: data.message,
+      }),
+    });
+
+    if (!req.ok) throw new Error('Failed to add reservation data');
+
+    fetchBookings();
+  };
 
   const fetchFlights = async () => {
-    const response = await fetch("http://localhost:5000/api/flight")
+    const response = await fetch('http://localhost:5000/api/flight');
     if (!response.ok) throw new Error('Failed to fetch flights');
 
-    const data = await response.json()
+    const data = await response.json();
+
+    if (data.length === 0) {
+      setFlights([])
+      return;
+    }
 
     const formattedFlights: Flight[] = data.map((flight: any, index: number) => {
-        return {
-          id: index + 1, // Add a unique ID
-          flightNumber: flight.number || 'Unknown',
-          origin: flight.origin?.airportName || 'Unknown',
-          destination: flight.destination?.airportName || 'Unknown',
-          departureTime:
-            flight.scheduledDateTime !== '0001-01-01T00:00:00'
-              ? flight.scheduledDateTime
-              : null, // Skip default datetime
-          registration: flight.airplane?.registration || 'Unknown',
-        };
-      });
-    
-    setFlights(formattedFlights)
-  }
-  
-  useEffect(() => {
-    fetchFlights()
-  }, [])
+      return {
+        id: index + 1, // Add a unique ID
+        flightNumber: flight.number || 'Unknown',
+        origin: flight.origin?.airportName || 'Unknown',
+        destination: flight.destination?.airportName || 'Unknown',
+        departureTime:
+          flight.scheduledDateTime !== '0001-01-01T00:00:00'
+            ? flight.scheduledDateTime
+            : null, // Skip default datetime
+        registration: flight.airplane?.registration || 'Unknown',
+      };
+    });
+
+    setFlights(formattedFlights);
+  };
 
   return (
     <PassengerDashboardLayout>
@@ -140,24 +207,42 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {flights.map((flight) => (
-                    <tr key={flight.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {flight.flightNumber}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {flight.origin} → {flight.destination}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {flight.departureTime}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <button className="bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800 text-sm">
-                          Buy Ticket
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {flights.map((flight) => {
+                    const isBooked = bookings.some(
+                      (booking) => booking.flightNumber === flight.flightNumber
+                    );
+
+                    return (
+                      <tr key={flight.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {flight.flightNumber}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {flight.origin} → {flight.destination}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {flight.departureTime}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                          {isBooked ? (
+                            <button
+                              disabled
+                              className="bg-gray-300 text-gray-600 px-4 py-2 rounded-lg cursor-not-allowed text-sm"
+                            >
+                              Bought
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => buyTicket(flight.flightNumber)}
+                              className="bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800 text-sm"
+                            >
+                              Buy Ticket
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -180,9 +265,11 @@ export default function Dashboard() {
                     <div className="text-sm text-gray-500">
                       Flight {booking.flightNumber}
                     </div>
-                    <div className="font-medium">{booking.origin} → {booking.destination}</div>
+                    <div className="font-medium">
+                      {booking.origin} → {booking.destination}
+                    </div>
                     <div className="text-sm text-gray-500">
-                        {format(parseISO(booking.departureTime), 'yyyy-MM-dd HH:mm')}
+                      {format(parseISO(booking.departureTime), 'yyyy-MM-dd HH:mm')}
                     </div>
                   </div>
                   <div className="mt-4 md:mt-0 flex items-center gap-4">
@@ -199,5 +286,5 @@ export default function Dashboard() {
         )}
       </div>
     </PassengerDashboardLayout>
-  )
+  );
 }

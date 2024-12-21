@@ -28,8 +28,8 @@ interface Airport {
 }
 
 export default function FlightManagement() {
-  const [flights, setFlights] = useState<Flight[]>([]); // Use the Flight type for the state
-  const [aircraft, setAircraft] = useState<Aircraft[]>([]); // Initially empty, will be populated by API
+  const [flights, setFlights] = useState<Flight[]>([]);
+  const [aircraft, setAircraft] = useState<Aircraft[]>([]);
   const [airports, setAirports] = useState<Airport[]>([]);
   const router = useRouter()
 
@@ -122,7 +122,6 @@ export default function FlightManagement() {
     fetchAirports();
   }, []);
 
-  // Add a new flight
   const addFlight = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -245,7 +244,10 @@ export default function FlightManagement() {
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm">
                 <button
-                  onClick={() => deleteFlight(flight.flightNumber)}
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent event bubbling to the row
+                    deleteFlight(flight.flightNumber);
+                  }}
                   className="text-red-600 hover:text-red-800 focus:outline-none"
                   aria-label="Delete Flight"
                 >
