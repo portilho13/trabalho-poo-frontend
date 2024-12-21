@@ -29,49 +29,28 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchBookings()
-    console.log(bookings)
   }, [])
+
+  const fetchFlight = async(flightNumber: string) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/flight/${flightNumber}`)
+      const data = await response.json()
+      console.log(data)
+    } catch(error) {
+
+    }
+  }
   
   const fetchBookings = async () => {
     try {
       const response = await fetch('http://localhost:5000/api/SessionManager/GetPassengerReservations');
       const data = await response.json();
 
-      
-      const bookingsArray = Array.isArray(data) ? data : data.bookings || [];
-      
-      const formattedBookings: Booking[] = await Promise.all(
-        bookingsArray.map(async (booking: any, index: number) => {
-          try {
-            const resp = await fetch(`http://localhost:5000/api/flight/${booking.flightNumber}`);
-            if (!resp.ok) {
-              throw new Error(`Failed to fetch flight data for ${booking.flightNumber}`);
-            }
-            const flightData = await resp.json();
-            
-            return {
-              id: index + 1,
-              flightNumber: flightData.number || 'Unknown',
-              origin: flightData.origin?.airportName || 'Unknown',
-              destination: flightData.destination?.airportName || 'Unknown',
-              departureTime: flightData.scheduledDateTime !== '0001-01-01T00:00:00'
-                ? flightData.scheduledDateTime
-                : null,
-            };
-          } catch (error) {
-            console.error(`Error fetching flight ${booking.flightNumber}:`, error);
-            return {
-              id: index + 1,
-              reservationCode: booking.reservationCode,
-              flightNumber: booking.flightNumber || 'Unknown',
-              origin: 'Unknown',
-              destination: 'Unknown',
-              departureTime: null,
-            };
-          }
-        })
-      );
-      
+          
+      const formattedBookings: Booking[] = data.map((booking: any, index: number) => {
+        fetchFlight(booking.flightNumber)
+      })
+
       setBookings(formattedBookings);
     } catch (error) {
       console.error('Error fetching bookings:', error);
@@ -85,8 +64,6 @@ export default function Dashboard() {
     if (!response.ok) throw new Error('Failed to fetch flights');
 
     const data = await response.json()
-
-    console.log(data)
 
     const formattedFlights: Flight[] = data.map((flight: any, index: number) => {
         return {

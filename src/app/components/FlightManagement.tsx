@@ -83,7 +83,7 @@ export default function FlightManagement() {
     origin: '',
     destination: '',
     departureTime: '',
-    registration: '', // Initialize with an empty registration
+    registration: '',
   });
 
   // Fetch flights from the API
